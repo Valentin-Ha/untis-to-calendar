@@ -78,7 +78,7 @@ with webuntis.Session(
         room_name = next((room.name for room in rooms if getattr(room, 'name', None)), 'Unbekannt')
         event.add('location', room_name)
 
-        # Falls die Stunde geändert wurde, Hinweis in der Beschreibung hinzufügen
+        # Falls die Stunde geändert wurde, Hinweis in der Beschreibung hinzufügen; funktioniert noch ned
         if hasattr(period, 'code') and period.code:
             event.add('description', f'Geändert: {period.code}')
 
