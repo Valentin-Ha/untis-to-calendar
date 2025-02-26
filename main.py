@@ -30,7 +30,7 @@ with webuntis.Session(
         password=PASSWORD,
         school=SCHOOL,
         server=SERVER,
-        useragent=''
+        useragent=useragent
 ) as s:
     s.login()
 
@@ -46,6 +46,9 @@ with webuntis.Session(
         start_date = today + datetime.timedelta(days=(7 - weekday))
 
     max_future_date = start_date
+
+    start_date = datetime.date(2025, 2, 17)
+    end_date = datetime.date(2025, 2, 21)
 
     for days_ahead in range(1, 20):  # maximal 20 Tage in Zukunft
         try:
@@ -65,8 +68,22 @@ with webuntis.Session(
 
     for period in timetable:
         event = icalendar.Event()
-        # Füge den Namen des Faches als Titel hinzu
-        event.add('summary', period.subjects[0].name if period.subjects else 'Unbekannt')
+        # Den Namen des Fachs ermitteln
+        subject_name = period.subjects[0].name if period.subjects else 'Unbekannt'
+
+        # Wenn ein Änderungs-Code gesetzt ist und genau "cancelled" (ohne Beachtung der Groß-/Kleinschreibung),
+        # wird der Eventtitel angepasst.
+        if period.code and period.code.lower() == 'cancelled':
+            event.add('summary', f"Entfall: {subject_name}")
+        else:
+            # Standardtitel: Fachname
+            event.add('summary', subject_name)
+            # Falls ein Änderungs-Code vorhanden ist (aber nicht 'cancelled'),
+            # den Änderungs-Text in die Beschreibung schreiben.
+            if period.substText:
+                desc = f"Geändert: {period.substText}"
+                event.add('description', desc)
+
         event.add('dtstart', parser.parse(str(period.start)))
         event.add('dtend', parser.parse(str(period.end)))
 
@@ -76,11 +93,7 @@ with webuntis.Session(
         except IndexError:
             rooms = []
         room_name = next((room.name for room in rooms if getattr(room, 'name', None)), 'Unbekannt')
-        event.add('location', room_name)
-
-        # Falls die Stunde geändert wurde, Hinweis in der Beschreibung hinzufügen
-        if hasattr(period, 'code') and period.code:
-            event.add('description', f'Geändert: {period.code}')
+        event.add('location', "Raum " + room_name)
 
         calendar.add_component(event)
 
