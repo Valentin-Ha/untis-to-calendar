@@ -75,14 +75,16 @@ with webuntis.Session(
         # wird der Eventtitel angepasst.
         if period.code and period.code.lower() == 'cancelled':
             event.add('summary', f"Entfall: {subject_name}")
+        elif period.substText:
+            desc = f"Geändert: {period.substText}"
+            event.add('description', desc)
+            event.add('summary', f"Ä: {subject_name}")
         else:
             # Standardtitel: Fachname
             event.add('summary', subject_name)
             # Falls ein Änderungs-Code vorhanden ist (aber nicht 'cancelled'),
             # den Änderungs-Text in die Beschreibung schreiben.
-            if period.substText:
-                desc = f"Geändert: {period.substText}"
-                event.add('description', desc)
+
 
         event.add('dtstart', parser.parse(str(period.start)))
         event.add('dtend', parser.parse(str(period.end)))
