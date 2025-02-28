@@ -47,9 +47,6 @@ with webuntis.Session(
 
     max_future_date = start_date
 
-    start_date = datetime.date(2025, 2, 17)
-    end_date = datetime.date(2025, 2, 21)
-
     for days_ahead in range(1, 20):  # maximal 20 Tage in Zukunft
         try:
             end_date = start_date + datetime.timedelta(days=days_ahead)
@@ -84,7 +81,6 @@ with webuntis.Session(
             event.add('summary', subject_name)
             # Falls ein Änderungs-Code vorhanden ist (aber nicht 'cancelled'),
             # den Änderungs-Text in die Beschreibung schreiben.
-
 
         event.add('dtstart', parser.parse(str(period.start)))
         event.add('dtend', parser.parse(str(period.end)))
