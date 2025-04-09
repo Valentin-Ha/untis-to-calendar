@@ -1,8 +1,7 @@
 import webuntis
 import datetime
-import icalendar
 from dateutil import parser
-
+import uuid
 
 def read_secrets(file_path):
     secrets = {}
@@ -14,7 +13,6 @@ def read_secrets(file_path):
                 secrets['PASSWORD'] = line.split(":", 1)[1].strip()
     return secrets
 
-
 secrets = read_secrets('Secrets.txt')
 
 # WebUntis-Konfiguration
@@ -24,7 +22,6 @@ PASSWORD = secrets['PASSWORD']
 SCHOOL = 'Musterschule'
 useragent = ''
 
-# WebUntis-Sitzung erstellen
 with webuntis.Session(
         username=USERNAME,
         password=PASSWORD,
@@ -47,7 +44,8 @@ with webuntis.Session(
 
     max_future_date = start_date
 
-    for days_ahead in range(1, 20):  # maximal 20 Tage in Zukunft
+    # Versuche bis zu 20 Tage in die Zukunft den Stundenplan abzufragen.
+    for days_ahead in range(1, 20):
         try:
             end_date = start_date + datetime.timedelta(days=days_ahead)
             timetable = s.my_timetable(start=start_date, end=end_date)
@@ -58,45 +56,56 @@ with webuntis.Session(
         except Exception:
             break
 
-    # iCalendar-Kalender erstellen
-    calendar = icalendar.Calendar()
-    calendar.add('prodid', '-//WebUntis Calendar Export//')
-    calendar.add('version', '2.0')
+    # Statt ein ICS zu erstellen, erzeugen wir eine Liste von Dictionaries für jedes Event.
+    timetable_events = []
 
     for period in timetable:
-        event = icalendar.Event()
-        # Den Namen des Fachs ermitteln
+        # Bestimme den Fachnamen
         subject_name = period.subjects[0].name if period.subjects else 'Unbekannt'
 
-        # Wenn ein Änderungs-Code gesetzt ist und genau "cancelled" (ohne Beachtung der Groß-/Kleinschreibung),
-        # wird der Eventtitel angepasst.
+        # Setze summary und ggf. description
         if period.code and period.code.lower() == 'cancelled':
-            event.add('summary', f"Entfall: {subject_name}")
+            summary = f"Entfall: {subject_name}"
+            description = None
         elif period.substText:
-            desc = f"Geändert: {period.substText}"
-            event.add('description', desc)
-            event.add('summary', f"Ä: {subject_name}")
+            summary = f"Ä: {subject_name}"
+            description = f"Geändert: {period.substText}"
         else:
-            # Standardtitel: Fachname
-            event.add('summary', subject_name)
-            # Falls ein Änderungs-Code vorhanden ist (aber nicht 'cancelled'),
-            # den Änderungs-Text in die Beschreibung schreiben.
+            summary = subject_name
+            description = None
 
-        event.add('dtstart', parser.parse(str(period.start)))
-        event.add('dtend', parser.parse(str(period.end)))
+        # Parse der Start- und Endzeit
+        dtstart_obj = parser.parse(str(period.start))
+        dtend_obj = parser.parse(str(period.end))
+        # Formatierung im typischen ICS-Format (UTC-Zeit). Passe dies ggf. an, falls du lokale Zeiten verwenden willst.
+        dtstart = dtstart_obj.strftime('%Y%m%dT%H%M%SZ')
+        dtend = dtend_obj.strftime('%Y%m%dT%H%M%SZ')
 
-        # Räume sicher abfragen
+        # Räume ermitteln
         try:
             rooms = period.rooms
         except IndexError:
             rooms = []
         room_name = next((room.name for room in rooms if getattr(room, 'name', None)), 'Unbekannt')
-        event.add('location', "Raum " + room_name)
+        location = "Raum " + room_name
 
-        calendar.add_component(event)
+        # Eindeutige UID generieren. Hier kombinieren wir den Fachnamen, das Startdatum und eine zufällig erzeugte UUID.
+        uid = f"{subject_name}-{dtstart}-{uuid.uuid4()}"
 
-    # ICS-Datei speichern
-    with open('stundenplan.ics', 'wb') as f:
-        f.write(calendar.to_ical())
+        event_dict = {
+            'uid': uid,
+            'summary': summary,
+            'description': description,
+            'dtstart': dtstart,
+            'dtend': dtend,
+            'location': location
+        }
 
-    print(f'Stundenplan bis zum {max_future_date} als Kalender exportiert.')
+        timetable_events.append(event_dict)
+
+    # Beispielsweise die erzeugten Dictionaries ausgeben oder weiterverarbeiten
+    print("Exportierte Events:")
+    for event in timetable_events:
+        print(event)
+
+    print(f'Stundenplan bis zum {max_future_date} exportiert.')
