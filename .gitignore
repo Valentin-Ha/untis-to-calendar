@@ -1,1 +1,5 @@
-Secrets.txt
+.env
+secrets.txt
+.venv
+stundenplan.ics
+output.log
