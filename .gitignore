@@ -1,5 +1,6 @@
 .env
 secrets.txt
 .venv
+.idea
 stundenplan.ics
 output.log
