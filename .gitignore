@@ -1,6 +1,11 @@
 .env
 secrets.txt
-.venv
 .idea
-stundenplan.ics
-output.log
+*.ics
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+*.egg-info/

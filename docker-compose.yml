@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  untis-calendar:
+    build: .
+    container_name: untis-calendar
+    restart: unless-stopped
+    volumes:
+      - untis-data:/data
+    environment:
+      - SERVER=${SERVER}
+      - USERNAME=${USERNAME}
+      - PASSWORD=${PASSWORD}
+      - SCHOOL=${SCHOOL}
+      - USERAGENT=${USERAGENT:-}
+      - MODE=docker
+      - DATA_DIR=/data
+      - UPDATE_INTERVAL=${UPDATE_INTERVAL:-15}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  untis-data:

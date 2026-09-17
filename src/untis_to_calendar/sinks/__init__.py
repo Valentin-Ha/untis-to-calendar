@@ -1,0 +1,1 @@
+"""Calendar output backends (sinks)."""

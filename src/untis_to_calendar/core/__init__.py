@@ -1,0 +1,1 @@
+"""Core logic for fetching and transforming WebUntis data."""
