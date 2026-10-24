@@ -8,7 +8,7 @@ Das Tool kann einmalig per CLI laufen oder als Dienst (z. B. im Docker-Container
 
 - Login bei WebUntis mit den eigenen Zugangsdaten
 - Export ab dem Montag der aktuellen Woche (am Wochenende ab dem nächsten Montag), soweit WebUntis Daten liefert (max. ~3 Wochen im Voraus)
-- Termine mit Fach, Raum und Zeit, mit fester Zeitzone (`TIMEZONE`) und stabiler UID pro Stunde
+- Termine mit Fach, Raum und Zeit, mit fester Zeitzone (`TIMEZONE`) und UID pro Stunde
 - Ausfälle werden als `STATUS:CANCELLED` markiert. Vertretungen und irreguläre Stunden bleiben normale Termine (oder auf Wunsch ebenfalls Ausfall, siehe `IRREGULAR_AS_CANCELLED`), der Vertretungstext landet in der Beschreibung
 - **CalDAV-Sync**: neue Stunden werden angelegt, geänderte aktualisiert, Stunden, die WebUntis nicht mehr liefert, gelöscht. Pro Lauf werden nur geänderte Termine geschrieben.
 - Mehrere Ausgaben gleichzeitig, z. B. `.ics`-Datei im Docker-Volume **und** CalDAV (`MODE=docker,caldav`)
