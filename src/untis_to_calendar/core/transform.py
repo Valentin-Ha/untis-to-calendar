@@ -1,4 +1,6 @@
 import datetime
+import hashlib
+
 from dateutil import parser
 
 from ..models import UntisEvent
@@ -44,10 +46,33 @@ def build_description(period) -> str | None:
     return None
 
 
-def period_to_event(period, room_mapping: dict[int, str]) -> UntisEvent:
+def build_uid(period, start: datetime.datetime, uid_suffix: str) -> str:
+    """Stable UID for a period, so calendar backends can update instead of duplicate."""
+    period_id = getattr(period, "id", None)
+    if period_id is not None:
+        return f"untis-{period_id}{uid_suffix}"
+
+    # Ohne WebUntis-ID: Startzeit und Unterrichtsnummer bleiben auch bei Vertretungen gleich
+    lsnumber = getattr(period, "lsnumber", None) or get_period_summary(period)
+    key = f"{start.isoformat()}|{lsnumber}"
+    return f"untis-x{hashlib.sha256(key.encode('utf-8')).hexdigest()[:12]}{uid_suffix}"
+
+
+def period_to_event(
+    period,
+    room_mapping: dict[int, str],
+    tz: datetime.tzinfo,
+    uid_suffix: str,
+    irregular_as_cancelled: bool = False,
+) -> UntisEvent:
     summary = get_period_summary(period)
+    # WebUntis liefert lokale Zeiten ohne Zeitzone
     start = parser.parse(str(period.start))
     end = parser.parse(str(period.end))
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=tz)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=tz)
 
     location = "Unbekannt"
     if period.rooms:
@@ -55,9 +80,12 @@ def period_to_event(period, room_mapping: dict[int, str]) -> UntisEvent:
         location = room_mapping.get(room_id, "Unbekannt")
 
     description = build_description(period)
-    cancelled = getattr(period, "code", None) in ("cancelled", "irregular")
+    # "irregular" sind Vertretungen/verlegte Stunden, die meist stattfinden; nur auf Wunsch als Ausfall
+    cancelled_codes = ("cancelled", "irregular") if irregular_as_cancelled else ("cancelled",)
+    cancelled = getattr(period, "code", None) in cancelled_codes
 
     return UntisEvent(
+        uid=build_uid(period, start, uid_suffix),
         summary=summary,
         start=start,
         end=end,

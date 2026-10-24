@@ -2,18 +2,13 @@ import logging
 import signal
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .config import Config
 from .core.untis_client import get_timetable_events
-from .sinks.ics_local import ICSLocalSink
-from .sinks.ics_volume import ICSVolumeSink
+from .sinks import SinkError, create_sinks, write_to_sinks
+from .sinks.ical import event_fingerprint
 
-
-SINKS = {
-    "local": ICSLocalSink,
-    "docker": ICSVolumeSink,
-}
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +21,9 @@ def signal_handler(signum, frame):
     shutdown_requested = True
 
 
-def get_file_hash(file_path: Path) -> str | None:
+def get_events_hash(events) -> int:
     """Einfacher Hash zum Erkennen von Änderungen."""
-    if not file_path.exists():
-        return None
-    with file_path.open("rb") as f:
-        return hash(f.read())
+    return hash(tuple(event_fingerprint(event) for event in events))
 
 
 def run_scheduler() -> None:
@@ -51,41 +43,37 @@ def run_scheduler() -> None:
 
     config = Config.from_env(env_file)
 
-    sink_class = SINKS.get(config.mode, ICSVolumeSink)
-    sink = sink_class(config)
+    sinks = create_sinks(config, fallback="docker")
 
-    # Für Change-Detection (optional)
+    # Für Change-Detection (nur fürs Log, geschrieben wird immer)
     last_hash = None
-    calendar_file = None
-    if config.mode == "docker":
-        data_dir = config.data_dir or Path("/data")
-        calendar_file = data_dir / "stundenplan.ics"
-    elif config.calendar_file:
-        calendar_file = config.calendar_file
 
     interval_seconds = config.update_interval * 60
-    logger.info(f"Scheduler gestartet. Intervall: {config.update_interval} Minuten. Modus: {config.mode}")
+    logger.info(
+        f"Scheduler gestartet. Intervall: {config.update_interval} Minuten. Modus: {config.mode or 'docker'}"
+    )
 
     run_count = 0
     while not shutdown_requested:
         run_count += 1
         try:
             logger.info(f"Run #{run_count}: Hole Stundenplan...")
-            events, max_future_date = get_timetable_events(config)
-            sink.write(events)
+            events, window_start, window_end = get_timetable_events(config)
+            write_to_sinks(sinks, events, window_start, window_end)
 
-            # Change Detection (optional)
-            if calendar_file:
-                current_hash = get_file_hash(calendar_file)
-                if current_hash != last_hash:
-                    logger.info("Stundenplan hat sich geändert. Calendar-App wird aktualisiert.")
-                    last_hash = current_hash
-                else:
-                    logger.debug("Keine Änderungen am Stundenplan.")
+            current_hash = get_events_hash(events)
+            if current_hash != last_hash:
+                logger.info("Stundenplan hat sich geändert. Calendar-App wird aktualisiert.")
+                last_hash = current_hash
+            else:
+                logger.debug("Keine Änderungen am Stundenplan.")
 
-            next_run = datetime.now().strftime("%Y-%m-%d %H:%M")
+            next_run = (datetime.now() + timedelta(seconds=interval_seconds)).strftime("%Y-%m-%d %H:%M")
             logger.info(f"Nächster Lauf um {next_run} (in {config.update_interval} Minuten).")
 
+        except SinkError as e:
+            logger.error(f"Fehler im Scheduler-Lauf: {e}")
+            logger.info(f"Nächster Versuch in {config.update_interval} Minuten.")
         except Exception as e:
             logger.error(f"Fehler im Scheduler-Lauf: {e}", exc_info=True)
             logger.info(f"Nächster Versuch in {config.update_interval} Minuten.")

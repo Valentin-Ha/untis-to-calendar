@@ -3,14 +3,7 @@ from pathlib import Path
 
 from .config import Config
 from .core.untis_client import get_timetable_events
-from .sinks.ics_local import ICSLocalSink
-from .sinks.ics_volume import ICSVolumeSink
-
-
-SINKS = {
-    "local": ICSLocalSink,
-    "docker": ICSVolumeSink,
-}
+from .sinks import create_sinks, write_to_sinks
 
 
 def main() -> None:
@@ -24,14 +17,12 @@ def main() -> None:
     env_file = base_dir / ".env"
 
     config = Config.from_env(env_file)
+    sinks = create_sinks(config, fallback="local")
 
-    events, max_future_date = get_timetable_events(config)
+    events, window_start, window_end = get_timetable_events(config)
+    write_to_sinks(sinks, events, window_start, window_end)
 
-    sink_class = SINKS.get(config.mode, ICSLocalSink)
-    sink = sink_class(config)
-    sink.write(events)
-
-    print(f"Stundenplan bis zum {max_future_date} als {config.mode} exportiert.")
+    print(f"Stundenplan bis zum {window_end} als {config.mode or 'local'} exportiert.")
 
 
 if __name__ == "__main__":

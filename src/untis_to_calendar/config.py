@@ -1,6 +1,8 @@
+import hashlib
 import os
 from pathlib import Path
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 @dataclass(frozen=True)
@@ -18,9 +20,37 @@ class Config:
     mode: str = "local"
     calendar_file: Path | None = None
     data_dir: Path | None = None
+    timezone: str = "Europe/Berlin"
+    irregular_as_cancelled: bool = False
+
+    # CalDAV
+    caldav_url: str | None = None
+    caldav_username: str | None = None
+    caldav_password: str | None = None
+    caldav_calendar: str = "Stundenplan"
 
     # Scheduler
     update_interval: int = 15  # Minuten
+
+    @property
+    def modes(self) -> list[str]:
+        """Output modes from MODE, which may be a comma-separated list."""
+        return [mode.strip().lower() for mode in self.mode.split(",") if mode.strip()]
+
+    @property
+    def tzinfo(self) -> ZoneInfo:
+        return ZoneInfo(self.timezone)
+
+    @property
+    def uid_suffix(self) -> str:
+        """Suffix shared by all event UIDs of this WebUntis account.
+
+        Lets the CalDAV sink recognize its own events, even in a calendar
+        that also holds other events or events of another account.
+        """
+        account = f"{self.school.strip()}|{self.username.strip()}".lower()
+        digest = hashlib.sha256(account.encode("utf-8")).hexdigest()[:10]
+        return f"-{digest}@untis-to-calendar"
 
     @classmethod
     def from_env(cls, env_file: Path | None = None) -> "Config":
@@ -42,6 +72,18 @@ class Config:
         except ValueError:
             update_interval = 15
 
+        irregular_as_cancelled = _parse_bool(
+            "IRREGULAR_AS_CANCELLED", get_env("IRREGULAR_AS_CANCELLED", None, required=False)
+        )
+
+        timezone = get_env("TIMEZONE", None, required=False) or "Europe/Berlin"
+        try:
+            ZoneInfo(timezone)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            raise ValueError(
+                f"TIMEZONE `{timezone}` ist keine gültige Zeitzone (z. B. `Europe/Berlin`)."
+            ) from None
+
         return cls(
             server=get_env("SERVER", required=True),
             username=get_env("USERNAME", required=True),
@@ -51,8 +93,23 @@ class Config:
             mode=get_env("MODE", "local", required=False),
             calendar_file=Path(calendar_file_str) if calendar_file_str else None,
             data_dir=Path(data_dir_str) if data_dir_str else None,
+            timezone=timezone,
+            irregular_as_cancelled=irregular_as_cancelled,
+            caldav_url=get_env("CALDAV_URL", None, required=False) or None,
+            caldav_username=get_env("CALDAV_USERNAME", None, required=False) or None,
+            caldav_password=get_env("CALDAV_PASSWORD", None, required=False) or None,
+            caldav_calendar=get_env("CALDAV_CALENDAR", None, required=False) or "Stundenplan",
             update_interval=update_interval,
         )
+
+
+def _parse_bool(name: str, value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in ("", "0", "false", "no", "nein", "off"):
+        return False
+    if normalized in ("1", "true", "yes", "ja", "on"):
+        return True
+    raise ValueError(f"{name} muss `true` oder `false` sein, nicht `{value}`.")
 
 
 def _load_env_file(file_path: Path) -> None:

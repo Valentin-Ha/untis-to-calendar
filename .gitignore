@@ -10,3 +10,5 @@ htmlcov/
 .venv/
 *.egg-info/
 calendar-data/
+.DS_Store
+.vscode/

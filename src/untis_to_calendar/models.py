@@ -6,6 +6,7 @@ import datetime
 class UntisEvent:
     """Normalized calendar event from WebUntis."""
 
+    uid: str
     summary: str
     start: datetime.datetime
     end: datetime.datetime

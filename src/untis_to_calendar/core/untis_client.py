@@ -42,7 +42,8 @@ def fetch_timetable(session, start_date: datetime.date) -> tuple[list, datetime.
     return timetable, max_future_date
 
 
-def get_timetable_events(config: Config) -> tuple[list[UntisEvent], datetime.date]:
+def get_timetable_events(config: Config) -> tuple[list[UntisEvent], datetime.date, datetime.date]:
+    """Fetch the timetable and return its events plus the first and last day it covers."""
     with webuntis.Session(
         username=config.username,
         password=config.password,
@@ -92,9 +93,17 @@ def get_timetable_events(config: Config) -> tuple[list[UntisEvent], datetime.dat
 
         room_mapping = {room.id: room.long_name for room in s.rooms()}
 
-        events = [
-            period_to_event(period, room_mapping)
-            for period in timetable
-        ]
+        tz = config.tzinfo
+        events = []
+        seen_uids = set()
+        for period in timetable:
+            event = period_to_event(
+                period, room_mapping, tz, config.uid_suffix, config.irregular_as_cancelled
+            )
+            if event.uid in seen_uids:
+                logger.debug(f"Doppelte Stunde übersprungen: {event.uid}")
+                continue
+            seen_uids.add(event.uid)
+            events.append(event)
 
-        return events, max_future_date
+        return events, start_date, max_future_date
