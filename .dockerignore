@@ -1,0 +1,17 @@
+.env
+secrets.txt
+*.ics
+calendar-data/
+
+.git/
+.github/
+.idea/
+.vscode/
+.DS_Store
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/

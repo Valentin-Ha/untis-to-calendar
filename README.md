@@ -117,7 +117,36 @@ Läuft der CalDAV-Server auf demselben Rechner, zeigt `localhost` im Container a
 
 ## Nutzung
 
-### Mit Docker (empfohlen für Dauerbetrieb)
+### Mit Docker-Image (empfohlen für Dauerbetrieb)
+
+Image Veröffentlich unter `ghcr.io/valentin-ha/untis-to-calendar` 
+
+`.env.example` als `.env` speichern, Zugangsdaten eintragen und daneben eine `docker-compose.yml` anlegen:
+
+```yaml
+services:
+  untis-calendar:
+    image: ghcr.io/valentin-ha/untis-to-calendar:latest
+    container_name: untis-calendar
+    restart: unless-stopped
+    volumes:
+      - ./calendar-data:/data
+    env_file:
+      - .env
+```
+
+```bash
+mkdir -p calendar-data
+docker compose up -d
+```
+
+`latest` folgt dem aktuellen Stand. Aktualisieren mit `docker compose pull && docker compose up -d`.
+
+In Portainer funktioniert dieselbe Datei im *Web editor* eines Stacks. Dabei `env_file` durch `stack.env` ersetzen und die Werte unter *Environment variables* eintragen.
+
+Der Container läuft nicht als root, sondern mit UID 1000. Der Ordner `calendar-data` muss für diesen Benutzer beschreibbar sein (siehe [Fehlerbehebung](#fehlerbehebung)).
+
+### Docker image selbst bauen
 
 ```bash
 cp .env.example .env   # Zugangsdaten eintragen, MODE=docker (oder docker,caldav)
@@ -204,4 +233,5 @@ Für den Kalenderinhalt `build_calendar()` aus `sinks/ical.py` verwenden, damit 
 - **CalDAV: `AuthorizationError … reason Unauthorized`** (HTTP 401): Benutzername oder Passwort falsch. Bei iCloud und Nextcloud mit Zwei-Faktor-Anmeldung ein App-Passwort verwenden. Bei `reason Forbidden` fehlt die Berechtigung für diese URL oder diesen Kalender.
 - **CalDAV: Kalender kann nicht angelegt werden**: Den Kalender in der Weboberfläche des Servers mit genau dem Namen aus `CALDAV_CALENDAR` anlegen.
 - **CalDAV im Container: `Connection refused`**: `CALDAV_URL` zeigt auf `localhost`. Siehe [CalDAV mit Docker](#caldav-mit-docker).
+- **Docker: `PermissionError: … /data/stundenplan.ics`**: Der Container läuft mit UID 1000 und darf nicht in den gemounteten Ordner schreiben. Das passiert z. B., wenn Docker den Ordner selbst als root angelegt hat. Rechte ändern mit sudo chown -R 1000:1000 calendar-data
 - **Termine doppelt im Kalender**: Wurde vorher eine mit einer älteren Version erzeugte `.ics`-Datei in denselben Kalender importiert, diese alten Termine einmal von Hand löschen. Sie haben keine UID des Tools, deshalb erkennt der Sync sie nicht als eigene Termine. Dasselbe gilt nach einer Änderung von `SCHOOL` oder `USERNAME`: Die bisherigen Termine gelten dann als fremd und bleiben stehen.
