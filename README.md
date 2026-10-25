@@ -4,6 +4,8 @@ Exportiert den eigenen Stundenplan aus **WebUntis** als `.ics`-Kalenderdatei ode
 
 Das Tool kann einmalig per CLI laufen oder als Dienst (z. B. im Docker-Container), der den Stundenplan in einem festen Intervall neu abruft.
 
+> **Hinweis:** Dies ist ein inoffizielles Projekt und steht in keiner Verbindung zur Untis GmbH. „WebUntis“ und „Untis“ sind Marken der Untis GmbH. Die Nutzung erfolgt mit dem eigenen Account und auf eigene Verantwortung. Das Tool nutzt die Schnittstelle, die auch die WebUntis-Weboberfläche verwendet. Ändert Untis diese, kann der Abruf ohne Vorwarnung nicht mehr funktionieren.
+
 ## Features
 
 - Login bei WebUntis mit den eigenen Zugangsdaten
