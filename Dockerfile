@@ -3,10 +3,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Dependencies installieren
-COPY pyproject.toml ./
+COPY pyproject.toml LICENSE ./
 COPY src/ ./src/
 
-RUN pip install --no-cache-dir ".[dev]"
+RUN pip install --no-cache-dir "."
 
 # Healthcheck für Container-Überwachung
 HEALTHCHECK --interval=5m --timeout=30s --start-period=1m --retries=3 \

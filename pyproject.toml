@@ -1,11 +1,17 @@
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "untis-to-calendar"
 version = "0.1.0"
-description = "Export WebUntis timetable to calendar formats"
+description = "Export a WebUntis timetable as an .ics file or sync it to a CalDAV calendar"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Valentin H" }]
+keywords = ["webuntis", "untis", "timetable", "stundenplan", "calendar", "ical", "ics", "caldav"]
+
 requires-python = ">=3.10"
 dependencies = [
     "webuntis>=0.1.21",
@@ -19,6 +25,9 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/Valentin-Ha/untis-to-calendar"
 
 [project.scripts]
 untis-calendar = "untis_to_calendar.cli:main"
