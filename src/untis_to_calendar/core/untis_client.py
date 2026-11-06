@@ -6,7 +6,7 @@ import webuntis
 
 from ..config import Config
 from ..models import UntisEvent
-from .transform import period_to_event
+from .transform import build_room_mapping, period_to_event
 
 
 logger = logging.getLogger(__name__)
@@ -128,7 +128,7 @@ def get_timetable_events(config: Config) -> tuple[list[UntisEvent], datetime.dat
 
         timetable, max_future_date = fetch_timetable(s, start_date)
 
-        room_mapping = {room.id: room.long_name for room in s.rooms()}
+        room_mapping = build_room_mapping(s.rooms(), config.room_name)
         subject_mapping = {subject.id: subject.long_name for subject in s.subjects()}
 
         events = periods_to_events(timetable, room_mapping, subject_mapping, config)

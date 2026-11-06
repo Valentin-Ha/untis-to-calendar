@@ -6,7 +6,7 @@ import pytest
 
 from untis_to_calendar.config import Config
 from untis_to_calendar.core import transform
-from untis_to_calendar.core.transform import period_to_event
+from untis_to_calendar.core.transform import build_room_mapping, format_room_name, period_to_event
 from untis_to_calendar.core.untis_client import periods_to_events
 
 
@@ -18,12 +18,13 @@ SUBJECTS = {10: "Mathematik"}
 class FakePeriod:
     """Mimics webuntis.objects.PeriodObject: raw data in _data, lookups that blow up like the library's."""
 
-    def __init__(self, period_id, rooms=(1,), subjects=(10,), date=20261109, start_time=800):
+    def __init__(self, period_id, rooms=(1,), subjects=(10,), date=20250113, start_time=800):
         self._data = {
             "id": period_id,
             "date": date,
             "startTime": start_time,
-            "ro": [{"id": room_id} for room_id in rooms],
+            # Raum als ID oder als Roh-Eintrag (z. B. {"id": 0, "orgid": 1} für einen gestrichenen Raum)
+            "ro": [room if isinstance(room, dict) else {"id": room} for room in rooms],
             "su": [{"id": subject_id} for subject_id in subjects],
         }
         self.id = period_id
@@ -112,22 +113,22 @@ def test_broken_period_does_not_stop_others(caplog):
 
     assert [event.uid for event in events] == [f"untis-1{config.uid_suffix}", f"untis-3{config.uid_suffix}"]
     assert events[1].location == "Unbekannt"
-    assert "Stunde übersprungen (ID 2, Datum 20261109" in caplog.text
+    assert "Stunde übersprungen (ID 2, Datum 20250113" in caplog.text
 
 
 def test_subst_text_in_title_when_enabled():
     period = FakePeriod(42)
-    period.substText = "D-Klausur"
+    period.substText = "Schulaufgabe"
 
     event = period_to_event(period, ROOMS, SUBJECTS, TZ, "@test", subst_text_in_title=True)
 
-    assert event.summary == "Mathematik – D-Klausur"
-    assert event.description == "D-Klausur"
+    assert event.summary == "Mathematik – Schulaufgabe"
+    assert event.description == "Schulaufgabe"
 
 
 def test_subst_text_not_in_title_when_disabled():
     period = FakePeriod(42)
-    period.substText = "D-Klausur"
+    period.substText = "Schulaufgabe"
 
     assert period_to_event(period, ROOMS, SUBJECTS, TZ, "@test").summary == "Mathematik"
 
@@ -156,7 +157,7 @@ def test_subst_text_in_title_for_cancelled_period():
 def test_fallback_uid_ignores_subst_text():
     without_text = FakePeriod(None)
     with_text = FakePeriod(None)
-    with_text.substText = "D-Klausur"
+    with_text.substText = "Schulaufgabe"
 
     uid_without = period_to_event(without_text, ROOMS, SUBJECTS, TZ, "@test", subst_text_in_title=True).uid
     uid_with = period_to_event(with_text, ROOMS, SUBJECTS, TZ, "@test", subst_text_in_title=True).uid
@@ -174,3 +175,77 @@ def test_config_reads_subst_text_in_title(monkeypatch):
     assert Config.from_env().subst_text_in_title is False
     monkeypatch.setenv("SUBST_TEXT_IN_TITLE", "true")
     assert Config.from_env().subst_text_in_title is True
+
+
+@pytest.mark.parametrize(
+    ("room_name", "expected"),
+    [("long", "Chemiesaal"), ("short", "R12"), ("both", "R12 (Chemiesaal)")],
+)
+def test_format_room_name(room_name, expected):
+    assert format_room_name("R12", "Chemiesaal", room_name) == expected
+
+
+@pytest.mark.parametrize("room_name", ["long", "short", "both"])
+def test_format_room_name_identical_or_missing_names(room_name):
+    assert format_room_name("R12", "R12", room_name) == "R12"
+    assert format_room_name("R12", "", room_name) == "R12"
+    assert format_room_name(None, "Chemiesaal", room_name) == "Chemiesaal"
+
+
+class FakeRoom:
+    def __init__(self, room_id, name, long_name):
+        self.id = room_id
+        self.name = name
+        self.long_name = long_name
+
+
+def test_build_room_mapping_skips_rooms_without_name():
+    rooms = [FakeRoom(1, "R12", "Chemiesaal"), FakeRoom(2, "", "")]
+
+    assert build_room_mapping(rooms, "both") == {1: "R12 (Chemiesaal)"}
+
+
+def test_removed_room_shows_original_room(caplog):
+    period = FakePeriod(42, rooms=({"id": 0, "orgid": 1},))
+
+    with caplog.at_level(logging.WARNING):
+        event = period_to_event(period, ROOMS, SUBJECTS, TZ, "@test")
+
+    assert event.location == "Kein Raum (statt Raum 101)"
+    assert caplog.text == ""
+
+
+@pytest.mark.parametrize("entry", [{"id": 0}, {"id": 0, "orgid": 999}])
+def test_removed_room_without_known_original(entry, caplog):
+    with caplog.at_level(logging.WARNING):
+        event = period_to_event(FakePeriod(42, rooms=(entry,)), ROOMS, SUBJECTS, TZ, "@test")
+
+    assert event.location == "Kein Raum"
+    assert caplog.text == ""
+
+
+def test_assigned_room_preferred_over_removed_room():
+    period = FakePeriod(42, rooms=({"id": 0, "orgid": 2}, 1))
+
+    assert period_to_event(period, ROOMS, SUBJECTS, TZ, "@test").location == "Raum 101"
+
+
+def test_unknown_assigned_room_not_reported_as_removed():
+    period = FakePeriod(42, rooms=({"id": 0, "orgid": 1}, 999))
+
+    assert period_to_event(period, ROOMS, SUBJECTS, TZ, "@test").location == "Unbekannt"
+
+
+def test_config_reads_room_name(monkeypatch):
+    monkeypatch.delenv("ROOM_NAME", raising=False)
+    for name, value in (("SERVER", "s"), ("USERNAME", "u"), ("PASSWORD", "p"), ("SCHOOL", "x")):
+        monkeypatch.setenv(name, value)
+
+    assert Config.from_env().room_name == "long"
+    monkeypatch.setenv("ROOM_NAME", " Short ")
+    assert Config.from_env().room_name == "short"
+    monkeypatch.setenv("ROOM_NAME", "  ")
+    assert Config.from_env().room_name == "long"
+    monkeypatch.setenv("ROOM_NAME", "kurz")
+    with pytest.raises(ValueError, match="ROOM_NAME"):
+        Config.from_env()

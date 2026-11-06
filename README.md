@@ -10,7 +10,7 @@ Das Tool kann einmalig per CLI laufen oder als Dienst (z. B. im Docker-Container
 
 - Login bei WebUntis mit den eigenen Zugangsdaten
 - Export ab dem Montag der aktuellen Woche (am Wochenende ab dem nächsten Montag), soweit WebUntis Daten liefert (max. ~3 Wochen im Voraus)
-- Termine mit Fach, Raum und Zeit, mit fester Zeitzone (`TIMEZONE`) und UID pro Stunde
+- Termine mit Fach, Raum und Zeit, mit fester Zeitzone (`TIMEZONE`) und UID pro Stunde. Der Raum wahlweise mit Kurz- oder Langnamen (`ROOM_NAME`); wurde der Raum einer Stunde gestrichen, steht „Kein Raum (statt …)“ mit dem ursprünglichen Raum im Termin
 - Ausfälle werden als `STATUS:CANCELLED` markiert. Vertretungen und irreguläre Stunden bleiben normale Termine (oder auf Wunsch ebenfalls Ausfall, siehe `IRREGULAR_AS_CANCELLED`), der Vertretungstext landet in der Beschreibung (auf Wunsch auch im Titel, siehe `SUBST_TEXT_IN_TITLE`)
 - **CalDAV-Sync**: neue Stunden werden angelegt, geänderte aktualisiert, Stunden, die WebUntis nicht mehr liefert, gelöscht. Pro Lauf werden nur geänderte Termine geschrieben.
 - Mehrere Ausgaben gleichzeitig, z. B. `.ics`-Datei im Docker-Volume **und** CalDAV (`MODE=docker,caldav`)
@@ -43,7 +43,8 @@ cp .env.example .env
 | `DATA_DIR`        | nein    | `/data`                | Zielverzeichnis im Modus `docker`; die Datei heißt immer `stundenplan.ics` |
 | `TIMEZONE`        | nein    | `Europe/Berlin`        | Zeitzone, in der WebUntis die Stundenzeiten liefert |
 | `IRREGULAR_AS_CANCELLED` | nein | `false`         | `true`: Stunden mit WebUntis-Code „irregulär“ (Vertretung, verlegte Stunde, Sonderveranstaltung) ebenfalls als Ausfall (`STATUS:CANCELLED`) markieren. Achtung: Diese Stunden finden meist statt. |
-| `SUBST_TEXT_IN_TITLE` | nein | `false`           | `true`: Vertretungstext aus WebUntis zusätzlich im Titel hinter dem Fach anzeigen, z. B. „Deutsch – D-Klausur“. Gilt auch für ausgefallene Stunden; der Text „Unterricht“ wird nicht angehängt. |
+| `SUBST_TEXT_IN_TITLE` | nein | `false`           | `true`: Vertretungstext aus WebUntis zusätzlich im Titel hinter dem Fach anzeigen, z. B. „Mathematik – Schulaufgabe“. Gilt auch für ausgefallene Stunden; der Text „Unterricht“ wird nicht angehängt. |
+| `ROOM_NAME`       | nein    | `long`                 | Welcher Raumname im Termin steht: `long` (Langname), `short` (Kurzname, wie in der Stundenplan-Ansicht von WebUntis) oder `both`, z. B. „R12 (Chemiesaal)“. Fehlt der gewählte Name, wird der andere genutzt. |
 | `CALDAV_URL`      | für `caldav` | –                 | Adresse des CalDAV-Servers (siehe [CalDAV](#caldav)) |
 | `CALDAV_USERNAME` | für `caldav` | –                 | Benutzername beim CalDAV-Server |
 | `CALDAV_PASSWORD` | für `caldav` | –                 | Passwort bzw. App-Passwort beim CalDAV-Server |

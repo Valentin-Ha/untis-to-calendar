@@ -13,14 +13,45 @@ logger = logging.getLogger(__name__)
 _warned_unknown_ids: set[tuple[str, int]] = set()
 
 
-def get_raw_ids(period, key: str) -> list[int]:
-    """IDs referenced in the raw WebUntis period data, e.g. key "ro" (rooms) or "su" (subjects).
+# WebUntis meldet einen gestrichenen Raum mit ID 0; die ursprüngliche Raum-ID steht dann in "orgid"
+NO_ROOM_ID = 0
+
+
+def get_raw_entries(period, key: str) -> list[dict]:
+    """Entries in the raw WebUntis period data, e.g. key "ro" (rooms) or "su" (subjects).
 
     Deliberately avoids ``period.rooms``/``period.subjects``: python-webuntis raises
     IndexError there as soon as one ID is missing from getRooms()/getSubjects().
     """
     data = getattr(period, "_data", None) or {}
-    return [entry["id"] for entry in data.get(key) or [] if isinstance(entry, dict) and "id" in entry]
+    return [entry for entry in data.get(key) or [] if isinstance(entry, dict) and "id" in entry]
+
+
+def get_raw_ids(period, key: str) -> list[int]:
+    return [entry["id"] for entry in get_raw_entries(period, key)]
+
+
+def format_room_name(short_name: str | None, long_name: str | None, room_name: str) -> str:
+    """Room name as configured by ROOM_NAME ("short", "long" or "both"), falling back to the other name."""
+    short_name = (short_name or "").strip()
+    long_name = (long_name or "").strip()
+    if room_name == "short":
+        return short_name or long_name
+    if room_name == "both":
+        if short_name and long_name and short_name != long_name:
+            return f"{short_name} ({long_name})"
+        return short_name or long_name
+    return long_name or short_name
+
+
+def build_room_mapping(rooms, room_name: str) -> dict[int, str]:
+    """Room ID -> display name; rooms without any name are left out and resolve to the fallback."""
+    mapping = {}
+    for room in rooms:
+        name = format_room_name(getattr(room, "name", None), getattr(room, "long_name", None), room_name)
+        if name:
+            mapping[room.id] = name
+    return mapping
 
 
 def resolve_name(ids: list[int], mapping: dict[int, str], kind: str) -> str | None:
@@ -39,6 +70,26 @@ def get_substitution_text(period) -> str | None:
         or getattr(period, "substit_text", None)
         or getattr(period, "substitutionText", None)
     )
+
+
+def build_location(period, room_mapping: dict[int, str]) -> str:
+    """Event location: the assigned room, or a hint if the room was removed."""
+    entries = get_raw_entries(period, "ro")
+    assigned_ids = [entry["id"] for entry in entries if entry["id"] != NO_ROOM_ID]
+    location = resolve_name(assigned_ids, room_mapping, "Raum")
+    if location:
+        return location
+
+    removed = [entry for entry in entries if entry["id"] == NO_ROOM_ID]
+    # Nur ohne zugewiesenen Raum; ein vorhandener, aber nicht auflösbarer Raum bleibt "Unbekannt"
+    if removed and not assigned_ids:
+        original = next(
+            (room_mapping[entry["orgid"]] for entry in removed if entry.get("orgid") in room_mapping),
+            None,
+        )
+        return f"Kein Raum (statt {original})" if original else "Kein Raum"
+
+    return "Unbekannt"
 
 
 def get_period_summary(period, subject_mapping: dict[int, str]) -> str:
@@ -115,7 +166,7 @@ def period_to_event(
     if end.tzinfo is None:
         end = end.replace(tzinfo=tz)
 
-    location = resolve_name(get_raw_ids(period, "ro"), room_mapping, "Raum") or "Unbekannt"
+    location = build_location(period, room_mapping)
 
     description = build_description(period)
     # "irregular" sind Vertretungen/verlegte Stunden, die meist stattfinden; nur auf Wunsch als Ausfall

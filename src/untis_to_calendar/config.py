@@ -4,6 +4,9 @@ from pathlib import Path
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+# Welcher WebUntis-Raumname im Kalender steht: Kurzname, Langname oder beide
+ROOM_NAME_FORMATS = ("short", "long", "both")
+
 
 @dataclass(frozen=True)
 class Config:
@@ -23,6 +26,7 @@ class Config:
     timezone: str = "Europe/Berlin"
     irregular_as_cancelled: bool = False
     subst_text_in_title: bool = False
+    room_name: str = "long"
 
     # CalDAV
     caldav_url: str | None = None
@@ -81,6 +85,12 @@ class Config:
             "SUBST_TEXT_IN_TITLE", get_env("SUBST_TEXT_IN_TITLE", None, required=False)
         )
 
+        room_name = (get_env("ROOM_NAME", None, required=False) or "").strip().lower() or "long"
+        if room_name not in ROOM_NAME_FORMATS:
+            raise ValueError(
+                f"ROOM_NAME muss `short`, `long` oder `both` sein, nicht `{room_name}`."
+            )
+
         timezone = get_env("TIMEZONE", None, required=False) or "Europe/Berlin"
         try:
             ZoneInfo(timezone)
@@ -101,6 +111,7 @@ class Config:
             timezone=timezone,
             irregular_as_cancelled=irregular_as_cancelled,
             subst_text_in_title=subst_text_in_title,
+            room_name=room_name,
             caldav_url=get_env("CALDAV_URL", None, required=False) or None,
             caldav_username=get_env("CALDAV_USERNAME", None, required=False) or None,
             caldav_password=get_env("CALDAV_PASSWORD", None, required=False) or None,
