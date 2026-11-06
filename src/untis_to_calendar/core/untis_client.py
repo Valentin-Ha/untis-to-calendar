@@ -33,13 +33,50 @@ def fetch_timetable(session, start_date: datetime.date) -> tuple[list, datetime.
         end_date = start_date + datetime.timedelta(days=days_ahead)
         try:
             periods = session.my_timetable(start=start_date, end=end_date)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Abruf bis {end_date} fehlgeschlagen, nutze Daten bis {max_future_date}: {e}")
             break
         if periods:
             timetable = periods
             max_future_date = end_date
 
     return timetable, max_future_date
+
+
+def periods_to_events(
+    timetable,
+    room_mapping: dict[int, str],
+    subject_mapping: dict[int, str],
+    config: Config,
+) -> list[UntisEvent]:
+    """Convert periods to events, skipping (with a warning) any period that fails to convert."""
+    tz = config.tzinfo
+    events = []
+    seen_uids = set()
+    for period in timetable:
+        try:
+            event = period_to_event(
+                period,
+                room_mapping,
+                subject_mapping,
+                tz,
+                config.uid_suffix,
+                config.irregular_as_cancelled,
+                config.subst_text_in_title,
+            )
+        except Exception as e:
+            data = getattr(period, "_data", None) or {}
+            logger.warning(
+                f"Stunde übersprungen (ID {data.get('id')}, Datum {data.get('date')}, "
+                f"Beginn {data.get('startTime')}): {type(e).__name__}: {e}"
+            )
+            continue
+        if event.uid in seen_uids:
+            logger.debug(f"Doppelte Stunde übersprungen: {event.uid}")
+            continue
+        seen_uids.add(event.uid)
+        events.append(event)
+    return events
 
 
 def get_timetable_events(config: Config) -> tuple[list[UntisEvent], datetime.date, datetime.date]:
@@ -92,18 +129,8 @@ def get_timetable_events(config: Config) -> tuple[list[UntisEvent], datetime.dat
         timetable, max_future_date = fetch_timetable(s, start_date)
 
         room_mapping = {room.id: room.long_name for room in s.rooms()}
+        subject_mapping = {subject.id: subject.long_name for subject in s.subjects()}
 
-        tz = config.tzinfo
-        events = []
-        seen_uids = set()
-        for period in timetable:
-            event = period_to_event(
-                period, room_mapping, tz, config.uid_suffix, config.irregular_as_cancelled
-            )
-            if event.uid in seen_uids:
-                logger.debug(f"Doppelte Stunde übersprungen: {event.uid}")
-                continue
-            seen_uids.add(event.uid)
-            events.append(event)
+        events = periods_to_events(timetable, room_mapping, subject_mapping, config)
 
         return events, start_date, max_future_date

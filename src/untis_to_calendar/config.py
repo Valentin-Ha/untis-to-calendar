@@ -22,6 +22,7 @@ class Config:
     data_dir: Path | None = None
     timezone: str = "Europe/Berlin"
     irregular_as_cancelled: bool = False
+    subst_text_in_title: bool = False
 
     # CalDAV
     caldav_url: str | None = None
@@ -76,6 +77,10 @@ class Config:
             "IRREGULAR_AS_CANCELLED", get_env("IRREGULAR_AS_CANCELLED", None, required=False)
         )
 
+        subst_text_in_title = _parse_bool(
+            "SUBST_TEXT_IN_TITLE", get_env("SUBST_TEXT_IN_TITLE", None, required=False)
+        )
+
         timezone = get_env("TIMEZONE", None, required=False) or "Europe/Berlin"
         try:
             ZoneInfo(timezone)
@@ -95,6 +100,7 @@ class Config:
             data_dir=Path(data_dir_str) if data_dir_str else None,
             timezone=timezone,
             irregular_as_cancelled=irregular_as_cancelled,
+            subst_text_in_title=subst_text_in_title,
             caldav_url=get_env("CALDAV_URL", None, required=False) or None,
             caldav_username=get_env("CALDAV_USERNAME", None, required=False) or None,
             caldav_password=get_env("CALDAV_PASSWORD", None, required=False) or None,

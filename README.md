@@ -11,7 +11,7 @@ Das Tool kann einmalig per CLI laufen oder als Dienst (z. B. im Docker-Container
 - Login bei WebUntis mit den eigenen Zugangsdaten
 - Export ab dem Montag der aktuellen Woche (am Wochenende ab dem nächsten Montag), soweit WebUntis Daten liefert (max. ~3 Wochen im Voraus)
 - Termine mit Fach, Raum und Zeit, mit fester Zeitzone (`TIMEZONE`) und UID pro Stunde
-- Ausfälle werden als `STATUS:CANCELLED` markiert. Vertretungen und irreguläre Stunden bleiben normale Termine (oder auf Wunsch ebenfalls Ausfall, siehe `IRREGULAR_AS_CANCELLED`), der Vertretungstext landet in der Beschreibung
+- Ausfälle werden als `STATUS:CANCELLED` markiert. Vertretungen und irreguläre Stunden bleiben normale Termine (oder auf Wunsch ebenfalls Ausfall, siehe `IRREGULAR_AS_CANCELLED`), der Vertretungstext landet in der Beschreibung (auf Wunsch auch im Titel, siehe `SUBST_TEXT_IN_TITLE`)
 - **CalDAV-Sync**: neue Stunden werden angelegt, geänderte aktualisiert, Stunden, die WebUntis nicht mehr liefert, gelöscht. Pro Lauf werden nur geänderte Termine geschrieben.
 - Mehrere Ausgaben gleichzeitig, z. B. `.ics`-Datei im Docker-Volume **und** CalDAV (`MODE=docker,caldav`)
 - Scheduler mit konfigurierbarem Update-Intervall und sauberem Shutdown (SIGTERM/SIGINT)
@@ -43,6 +43,7 @@ cp .env.example .env
 | `DATA_DIR`        | nein    | `/data`                | Zielverzeichnis im Modus `docker`; die Datei heißt immer `stundenplan.ics` |
 | `TIMEZONE`        | nein    | `Europe/Berlin`        | Zeitzone, in der WebUntis die Stundenzeiten liefert |
 | `IRREGULAR_AS_CANCELLED` | nein | `false`         | `true`: Stunden mit WebUntis-Code „irregulär“ (Vertretung, verlegte Stunde, Sonderveranstaltung) ebenfalls als Ausfall (`STATUS:CANCELLED`) markieren. Achtung: Diese Stunden finden meist statt. |
+| `SUBST_TEXT_IN_TITLE` | nein | `false`           | `true`: Vertretungstext aus WebUntis zusätzlich im Titel hinter dem Fach anzeigen, z. B. „Deutsch – D-Klausur“. Gilt auch für ausgefallene Stunden; der Text „Unterricht“ wird nicht angehängt. |
 | `CALDAV_URL`      | für `caldav` | –                 | Adresse des CalDAV-Servers (siehe [CalDAV](#caldav)) |
 | `CALDAV_USERNAME` | für `caldav` | –                 | Benutzername beim CalDAV-Server |
 | `CALDAV_PASSWORD` | für `caldav` | –                 | Passwort bzw. App-Passwort beim CalDAV-Server |
