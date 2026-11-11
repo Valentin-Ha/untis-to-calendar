@@ -2,7 +2,7 @@ import datetime
 import logging
 
 import caldav
-from caldav.lib.error import DAVError, NotFoundError, UidConflictError
+from caldav.lib.error import AuthorizationError, DAVError, NotFoundError, RateLimitError, UidConflictError
 
 from ..config import Config
 from ..models import UntisEvent
@@ -45,41 +45,44 @@ class CalDAVSink(CalendarSink):
             window_end + datetime.timedelta(days=1), datetime.time.min, tzinfo=tz
         )
 
-        with caldav.DAVClient(
-            url=self.config.caldav_url,
-            username=self.config.caldav_username,
-            password=self.config.caldav_password,
-            timeout=60,
-        ) as client:
-            calendar = self._open_calendar(client)
-            existing, duplicates = self._load_own_events(calendar, range_start, range_end)
+        try:
+            with caldav.DAVClient(
+                url=self.config.caldav_url,
+                username=self.config.caldav_username,
+                password=self.config.caldav_password,
+                timeout=60,
+            ) as client:
+                calendar = self._open_calendar(client)
+                existing, duplicates = self._load_own_events(calendar, range_start, range_end)
 
-            created = updated = unchanged = deleted = 0
-            failures: list[str] = []
+                created = updated = unchanged = deleted = 0
+                failures: list[str] = []
 
-            for event in events:
-                obj = existing.pop(event.uid, None)
-                try:
-                    if obj is None:
-                        self._create(calendar, event)
-                        created += 1
-                    elif _stored_fingerprint(obj) != event_fingerprint(event):
-                        _replace(obj, event)
-                        updated += 1
-                    else:
-                        unchanged += 1
-                except DAVError as e:
-                    logger.error(f"CalDAV: Stunde {event.uid} konnte nicht gespeichert werden: {e}")
-                    failures.append(event.uid)
+                for event in events:
+                    obj = existing.pop(event.uid, None)
+                    try:
+                        if obj is None:
+                            self._create(calendar, event)
+                            created += 1
+                        elif _stored_fingerprint(obj) != event_fingerprint(event):
+                            _replace(obj, event)
+                            updated += 1
+                        else:
+                            unchanged += 1
+                    except DAVError as e:
+                        logger.error(f"CalDAV: Stunde {event.uid} konnte nicht gespeichert werden: {e}")
+                        failures.append(event.uid)
 
-            # Was jetzt noch übrig ist, gibt es in WebUntis nicht mehr
-            for obj in list(existing.values()) + duplicates:
-                try:
-                    obj.delete()
-                    deleted += 1
-                except DAVError as e:
-                    logger.error(f"CalDAV: Stunde {obj.url} konnte nicht gelöscht werden: {e}")
-                    failures.append(str(obj.url))
+                for obj in list(existing.values()) + duplicates:
+                    try:
+                        obj.delete()
+                        deleted += 1
+                    except DAVError as e:
+                        logger.error(f"CalDAV: Stunde {obj.url} konnte nicht gelöscht werden: {e}")
+                        failures.append(str(obj.url))
+        except (DAVError, OSError) as e:
+            # Server- und Verbindungsfehler
+            raise SinkError(_describe_connection_error(e)) from None
 
         logger.info(
             f"CalDAV-Kalender „{self.config.caldav_calendar}“ synchronisiert: "
@@ -132,8 +135,28 @@ class CalDAVSink(CalendarSink):
         try:
             calendar.add_event(data)
         except UidConflictError:
-            # Gleiche UID liegt schon unter anderer URL, z. B. von einem anderen Client angelegt
             _replace(calendar.event_by_uid(event.uid), event)
+
+
+def _describe_connection_error(error: DAVError | OSError) -> str:
+    """Return a short message for an server or connection failure."""
+    if isinstance(error, RateLimitError):
+        wait = ""
+        if error.retry_after_seconds is not None:
+            wait = f", Wartezeit laut Server: {error.retry_after_seconds:.0f} s"
+        return (
+            f"CalDAV-Server begrenzt gerade die Anfragen (Rate Limit{wait}). "
+            "Nächster Versuch beim nächsten Lauf."
+        )
+    if isinstance(error, AuthorizationError):
+        return (
+            f"CalDAV-Server hat die Anmeldung abgelehnt ({error}). "
+            "CALDAV_USERNAME und CALDAV_PASSWORD prüfen."
+        )
+    if isinstance(error, OSError):
+        # Verbindungsfehler und Timeouts der HTTP-Bibliothek sind Unterklassen von OSError
+        return f"CalDAV-Server nicht erreichbar ({error}). Nächster Versuch beim nächsten Lauf."
+    return f"CalDAV-Server meldet einen Fehler ({error}). Nächster Versuch beim nächsten Lauf."
 
 
 def _stored_fingerprint(obj: caldav.Event) -> str | None:
